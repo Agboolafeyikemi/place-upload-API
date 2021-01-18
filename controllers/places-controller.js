@@ -1,5 +1,6 @@
 const uuid = require("uuid");
 const HttpError = require("../models/error");
+const getCoordinates = require("../utilis/location");
 const { validationResult } = require("express-validator");
 
 let DUMMY_PLACES = [
@@ -33,11 +34,11 @@ const getPlaceById = (req, res, next) => {
 
 const getPlacesByUserId = (req, res, next) => {
   const userId = req.params.uid;
-  console.log(userId, "UserID");
 
   const places = DUMMY_PLACES.filter((user) => {
     return user.creator === userId;
   });
+
   if (!places || places.length === 0) {
     return next(
       new HttpError("Could not find a user for the provided request!", 404)
@@ -47,13 +48,20 @@ const getPlacesByUserId = (req, res, next) => {
   res.json({ places });
 };
 
-const createPlace = (req, res, next) => {
-  const error = validationResult(req);
-  if (!error.isEmpty()) {
-    console.log(error);
-    throw new HttpError("invalid input passed, please check your data", 422);
+const createPlace = async (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return next(
+      new HttpError("invalid input passed, please check your data", 422)
+    );
   }
-  const { id, title, description, coordinates, address, creator } = req.body;
+  const { id, title, description, address, creator } = req.body;
+  let coordinates;
+  try {
+    coordinates = await getCoordinates();
+  } catch (error) {
+    return next(error);
+  }
   const createdPlace = {
     id,
     title,
@@ -68,6 +76,10 @@ const createPlace = (req, res, next) => {
 };
 
 const editPlace = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    throw new HttpError("invalid input passed, please check your data", 422);
+  }
   const { title, description } = req.body;
 
   const placeId = req.params.pid;
@@ -85,6 +97,9 @@ const editPlace = (req, res, next) => {
 
 const deletePlace = (req, res, next) => {
   const placeId = req.params.pid;
+  if (!DUMMY_PLACES.find((p) => placeId === p.id)) {
+    throw new HttpError("Could not find the place that match the Id", 404);
+  }
   DUMMY_PLACES = DUMMY_PLACES.filter((p) => p.id !== placeId);
   res.status(201).json({ message: "Message Deleted!" });
 };
